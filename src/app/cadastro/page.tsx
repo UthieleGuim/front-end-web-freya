@@ -26,6 +26,16 @@ interface IBGECityResponse {
   nome: string;
 }
 
+interface CepResponse {
+  cep: string;
+  address: string;
+  state: string;
+  district: string;
+  lat: string;
+  lng: string;
+  city: string;
+}
+
 export default function Create() {
   const [ufs, setUfs] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]);
@@ -33,7 +43,7 @@ export default function Create() {
   const [selectedCity, setSelectedCity] = useState('0');
   const [selectedFile, setSelectedFile] = useState<File>();
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
-  const [formData, setFormDate] = useState({
+  const [formData, setFormData] = useState({
     material: '',
     name: '',
     email: '',
@@ -44,26 +54,6 @@ export default function Create() {
     latitude: '0',
     longitude: '0'
   });
-
-  useEffect(() => {
-    axios.get<IBGEUFResponse[]>('https://servicodados.ibge.gov.br/api/v1/localidades/estados').then(res => {
-      const ufInitials = res.data.map(uf => uf.sigla);
-
-      setUfs(ufInitials);
-    });
-  }, []);
-
-  useEffect(() => {
-    if(selectedUf === '0') {
-      return;
-    }
-
-    axios.get<IBGECityResponse[]>(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${selectedUf}/municipios`)
-      .then(res => {
-      const cityName = res.data.map(city => city.nome);
-      setCities(cityName);
-    });
-  }, [selectedUf]);
 
   function handleSelectUf(event: ChangeEvent<HTMLSelectElement>) {
     const uf = event.target.value;
@@ -77,17 +67,25 @@ export default function Create() {
     setSelectedCity(city);
   }
 
-  function handleInputChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleInputChange(event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
     const {name , value } = event.target;
 
-    setFormDate({ ...formData, [name]: value });
+    setFormData({ ...formData, [name]: value });
   }
 
-  function handleSeachCep(event: ChangeEvent<HTMLInputElement>) {
-    //https://cep.awesomeapi.com.br/json/05851210
-    const {name , value} = event.target;
+  function handleSeachCep(event: ChangeEvent<HTMLInputElement>) {    
+    axios.get<CepResponse>(`https://cep.awesomeapi.com.br/json/${event.target.value}`)
+      .then(res => {
+        setFormData((prev) => ({
+          ...prev,
+          address: res.data.address,
+          latitude: res.data.lat,
+          longitude: res.data.lng,
+        }));
 
-    setFormDate({ ...formData, [name]: value });
+        setSelectedUf(res.data.state);
+        setSelectedCity(res.data.city);
+    });
   }
 
   function handleSelectItems(id: number) {
@@ -110,10 +108,11 @@ export default function Create() {
     const city = selectedCity;
     const items = selectedItems;
 
-   /* const data = new FormData();
+    const data = new FormData();
 
     data.append('name', name);
     data.append('email', email);
+    data.append('material', material);
     data.append('whatsapp', whatsapp);
     data.append('zipCode', zipCode);
     data.append('address', address);
@@ -126,43 +125,32 @@ export default function Create() {
     
     if(selectedFile) {
       data.append('image', selectedFile);
-    }*/
+    }
 
-      let data = JSON.stringify({
-        material,
-        name,
-        email,
-        whatsapp,
-        zipCode,
-        address,
-        number,
-        uf,
-        city,
-        latitude,
-        longitude,
-        items,
-    });
-      
-      let config = {
-        method: 'post',
-        maxBodyLength: Infinity,
-        url: 'http://localhost:8989/freya',
-        headers: { 
+    await api.post('freya', data);
 
-          'Content-Type': 'application/json'
-        },
-        data : data
-      };
-      
-      axios.request(config)
-      .then((response) => {
-        console.log(JSON.stringify(response.data));
-      })
-      .catch((error) => {
-        console.log(error);
-      });
-   
+    alert('Ponto de coleta Criado');
   }
+
+  useEffect(() => {
+    axios.get<IBGEUFResponse[]>('https://servicodados.ibge.gov.br/api/v1/localidades/estados').then(res => {
+      const ufInitials = res.data.map(uf => uf.sigla);
+
+      setUfs(ufInitials);
+    });
+  }, []);
+
+  useEffect(() => {
+    if(selectedUf === '0') {
+      return;
+    }
+
+    axios.get<IBGECityResponse[]>(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${selectedUf}/municipios`)
+      .then(res => {
+      const cityName = res.data.map(city => city.nome);
+      setCities(cityName);
+    });
+  }, [selectedUf]);
 
   return (
     <div className="w-full max-w-[1100px] mx-auto">
@@ -185,14 +173,14 @@ export default function Create() {
 
 
           <div className="flex-1 flex flex-col mb-11">
-            <label htmlFor="material" className="text-[14px] mb-2">Sobre o material:</label>
-            <input 
-              type="text" 
+            <label htmlFor="material" className="text-[14px] mb-2">Informações do material:</label>
+            <textarea
               id="material"
-              name="material" 
+              name="material"
               onChange={handleInputChange}
-              className="flex-1 bg-[#F0F0F5] rounded-lg px-4 py-6 text-[16px] text-[#6C6C80] placeholder:text-[#A0A0B2]  resize-none"
-            />
+              className="flex-1 bg-[#F0F0F5] rounded-lg px-4 py-6 text-[16px] text-[#6C6C80] placeholder:text-[#A0A0B2] resize-none"
+              placeholder="Informe o procedimento a seguir e os tipos de material que a empresa coleta."
+              />
           </div>
 
           <div className="flex-1 flex flex-col mb-11">
@@ -256,6 +244,7 @@ export default function Create() {
                 type="text"
                 id="zipCode"
                 name="zipCode"
+                onBlur={handleSeachCep}
                 onChange={handleInputChange}
                 className="flex-1 bg-[#F0F0F5] rounded-lg px-4 py-2 text-[16px] text-[#6C6C80] placeholder:text-[#A0A0B2]"
               />
@@ -268,6 +257,7 @@ export default function Create() {
                 id="address"
                 name="address"
                 onChange={handleInputChange}
+                value={formData.address}
                 className="flex-1 bg-[#F0F0F5] rounded-lg px-4 py-2 text-[16px] text-[#6C6C80] placeholder:text-[#A0A0B2]"
               />
             </div>
